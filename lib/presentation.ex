@@ -2,30 +2,11 @@ defmodule Presentation do
   @moduledoc """
   Documentation for Presentation.
   """
-  def width() do
-    case :io.columns() do
-      {:ok, width} -> width
-      _ -> System.cmd("tput", ["cols"]) |> elem(0) |> String.strip() |> Integer.parse() |> elem(0)
-    end
-  end
-
-  def height() do
-    case :io.rows() do
-      {:ok, height} ->
-        height
-      _ ->
-        System.cmd("tput", ["lines"]) |> elem(0) |> String.strip() |> Integer.parse() |> elem(0)
-    end
-  end
 
   def present(presentation) do
-    IO.ANSI.clear() |> IO.write()
-    IO.ANSI.home() |> IO.write()
-
     Enum.each(presentation, fn slide ->
+      home()
       present_slide(slide)
-      IO.ANSI.clear() |> IO.write()
-      IO.ANSI.home() |> IO.write()
     end)
   end
 
@@ -35,17 +16,41 @@ defmodule Presentation do
 
     Enum.each(slide, fn section ->
       present_section(section)
-      IO.read(:line)
-      IO.ANSI.cursor_up(1) |> IO.write()
-      IO.ANSI.cursor_left(width()) |> IO.write()
+      wait_for_keypress()
     end)
   end
 
-  def center(str) do
-    width = width()
-    pad = div(width + String.length(str) - 2, 2)
-    a = String.pad_leading(" " <> str, pad, "=")
-    b = String.pad_trailing(a <> " ", width, "=")
+  def present_section({:typewrite, row}) do
+    pad_row(row)
+    |> String.graphemes()
+    |> Enum.each(fn char ->
+      IO.write(char)
+      :timer.sleep(:rand.uniform(50) + 50)
+    end)
+
+    IO.puts("")
+  end
+
+  def present_section({:direct, row}) do
+    pad_row(row) |> IO.puts()
+  end
+
+  def present_section({:func, func_string, func}) do
+    pad_row(func_string) |> IO.puts()
+    IO.puts("")
+    pad()
+    IO.ANSI.green() |> IO.write()
+    IO.puts("Execute...\n")
+
+    wait_for_keypress()
+    center("Output") |> IO.puts()
+    IO.ANSI.reset() |> IO.write()
+
+    func.()
+    IO.ANSI.green() |> IO.write()
+
+    center("End") |> IO.puts()
+    IO.ANSI.reset() |> IO.write()
   end
 
   def present_footer(footer) do
@@ -65,25 +70,51 @@ defmodule Presentation do
     center(header) |> IO.write()
   end
 
-  def present_section({:typewrite, rows}) do
-    Enum.each(rows, fn row ->
-      row
-      |> String.graphemes()
-      |> Enum.each(fn char ->
-        IO.write(char)
-        Process.sleep(:rand.uniform(50) + 50)
-      end)
-
-      # IO.ANSI.cursor_down(1) |> IO.write()
-      # IO.ANSI.cursor_left(width()) |> IO.write()
-    end)
+  def wait_for_keypress() do
+    IO.read(:line)
+    IO.ANSI.cursor_up(1) |> IO.write()
+    IO.ANSI.cursor_left(width()) |> IO.write()
   end
 
-  def present_section({:direct, rows}) do
-    Enum.each(rows, fn row ->
-      IO.write(row)
-      # IO.ANSI.cursor_down(1) |> IO.write()
-      # IO.ANSI.cursor_left(width()) |> IO.write()
-    end)
+  def home() do
+    IO.ANSI.clear() |> IO.write()
+    IO.ANSI.home() |> IO.write()
+  end
+
+  def pad() do
+    IO.ANSI.cursor_right(padding()) |> IO.write()
+  end
+
+  def pad_row(row) do
+    IO.ANSI.cursor_right(padding()) <>
+      String.replace(row, "\n", "\n" <> IO.ANSI.cursor_right(padding()), global: true)
+  end
+
+  def center(str) do
+    width = width()
+    pad = div(width + String.length(str) - 2, 2)
+    a = String.pad_leading(" " <> str, pad, "=")
+    String.pad_trailing(a <> " ", width, "=")
+  end
+
+  def padding() do
+    10
+  end
+
+  def width() do
+    case :io.columns() do
+      {:ok, width} -> width
+      _ -> System.cmd("tput", ["cols"]) |> elem(0) |> String.trim() |> Integer.parse() |> elem(0)
+    end
+  end
+
+  def height() do
+    case :io.rows() do
+      {:ok, height} ->
+        height
+
+      _ ->
+        System.cmd("tput", ["lines"]) |> elem(0) |> String.trim() |> Integer.parse() |> elem(0)
+    end
   end
 end
